@@ -47,24 +47,54 @@ for _name in ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy", "litellm", "httpx"):
 # restarted. The functions still exist in the submodules, so restore them from there.
 
 
-def _restore_litellm_attrs(*names: str) -> None:
-    import importlib
+_LITELLM_PROBLEM: str | None = None  # why litellm is unusable, shown to the user
 
+
+def _restore_litellm_attrs(*names: str) -> None:
+    """Make sure litellm.<name> exists; log (and remember) the real reason when it cannot."""
+    import importlib
+    import traceback
+
+    global _LITELLM_PROBLEM
     for name in names:
         if getattr(litellm, name, None) is not None:
             continue
         for module_name in ("litellm.main", "litellm.utils"):
             try:
                 value = getattr(importlib.import_module(module_name), name, None)
-            except Exception:  # noqa: BLE001 - try the next module
+            except Exception as exc:  # noqa: BLE001 - remember why, try the next module
+                _LITELLM_PROBLEM = f"importing {module_name} failed: {type(exc).__name__}: {exc}"
+                logger.error("litellm is broken (%s): %s", _LITELLM_PROBLEM, traceback.format_exc())
                 continue
             if value is not None:
                 setattr(litellm, name, value)
                 logger.warning("Restored missing litellm.%s from %s", name, module_name)
                 break
+        else:
+            _LITELLM_PROBLEM = _LITELLM_PROBLEM or f"litellm has no '{name}'"
+            logger.error("litellm.%s is unavailable: %s", name, _LITELLM_PROBLEM)
 
 
 _restore_litellm_attrs("acompletion", "completion", "get_model_info", "token_counter")
+logger.info(
+    "litellm %s from %s (python %s)",
+    __import__("importlib.metadata").metadata.version("litellm"), getattr(litellm, "__file__", "?"), __import__("sys").executable,
+)
+
+
+def _acompletion(**kwargs: Any) -> Any:
+    """litellm.acompletion, re-resolved on every call so a late repair is picked up."""
+    fn = getattr(litellm, "acompletion", None)
+    if fn is None:
+        _restore_litellm_attrs("acompletion")
+        fn = getattr(litellm, "acompletion", None)
+    if fn is None:
+        raise ProviderError(
+            f"The AI library (litellm) did not load correctly: {_LITELLM_PROBLEM or 'unknown reason'}. "
+            "Stop the backend completely (run.bat option 6) and start it again (option 1 or 3).",
+            "library",
+        )
+    return fn(**kwargs)
 
 
 # --- Providers --------------------------------------------------------------
@@ -309,7 +339,7 @@ async def test_connection(
     try:
         params = build_model_params(cfg)
         response = await asyncio.wait_for(
-            litellm.acompletion(
+            _acompletion(
                 **params,
                 messages=[{"role": "user", "content": "Reply with OK"}],
                 max_tokens=16,
@@ -471,7 +501,7 @@ async def stream_chat(
         kwargs["temperature"] = temperature
 
     try:
-        response = await litellm.acompletion(**kwargs)
+        response = await _acompletion(**kwargs)
     except asyncio.CancelledError:
         raise
     except Exception as exc:
