@@ -39,6 +39,33 @@ litellm.drop_params = True  # silently drop params a provider does not support
 for _name in ("LiteLLM", "LiteLLM Router", "LiteLLM Proxy", "litellm", "httpx"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 
+# --- LiteLLM namespace repair ------------------------------------------------
+# litellm copies its public functions into the package namespace with `from .main import *`
+# while it is being imported. If that import happens in an unlucky order (a circular
+# import at process start), the package ends up without `acompletion`, and every request
+# then fails with "module 'litellm' has no attribute 'acompletion'" until the process is
+# restarted. The functions still exist in the submodules, so restore them from there.
+
+
+def _restore_litellm_attrs(*names: str) -> None:
+    import importlib
+
+    for name in names:
+        if getattr(litellm, name, None) is not None:
+            continue
+        for module_name in ("litellm.main", "litellm.utils"):
+            try:
+                value = getattr(importlib.import_module(module_name), name, None)
+            except Exception:  # noqa: BLE001 - try the next module
+                continue
+            if value is not None:
+                setattr(litellm, name, value)
+                logger.warning("Restored missing litellm.%s from %s", name, module_name)
+                break
+
+
+_restore_litellm_attrs("acompletion", "completion", "get_model_info", "token_counter")
+
 
 # --- Providers --------------------------------------------------------------
 
@@ -226,6 +253,14 @@ def map_exception(exc: BaseException, secret: str | None = None) -> ProviderErro
         if "api key" in text or "api_key" in text:
             return ProviderError("Invalid API key or access denied by the provider.", "auth")
         return ProviderError(f"The provider rejected the request: {_short(exc, secret)}", "bad_request")
+    text = str(exc).lower()
+    # Providers that cap spending per key (Paasta: "سقف هزینه روزانه ... تمام شده").
+    if "سقف هزینه" in text or "spend limit" in text or "budget exceeded" in text or "daily limit" in text:
+        return ProviderError(
+            "The daily spending limit of this API key is used up. Raise the limit in the provider's "
+            "panel, or wait until the next day.",
+            "spend_limit",
+        )
     return ProviderError(f"Unexpected provider error: {_short(exc, secret)}", "unknown")
 
 
