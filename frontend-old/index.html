@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WorkLoop</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="side">
+      <div class="brand">
+        <span class="brand-mark">⟳</span>
+        <div>
+          <strong>WorkLoop</strong>
+          <small>رئیس و کارگر، در یک حلقه</small>
+        </div>
+      </div>
+      <nav id="nav">
+        <a data-view="run" href="#run">اجرا</a>
+        <a data-view="prompts" href="#prompts">صف پرامپت‌ها</a>
+        <a data-view="profiles" href="#profiles">پروفایل‌های API</a>
+        <a data-view="setup" href="#setup">نقش‌ها و پروژه</a>
+        <a data-view="history" href="#history">تاریخچه</a>
+      </nav>
+      <div class="side-foot">
+        <div class="conn"><span id="conn-dot" class="dot"></span><span id="conn-text">در حال اتصال…</span></div>
+        <button class="link" id="server-btn">آدرس سرور</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="top">
+        <div id="state-pill" class="pill">—</div>
+        <div id="state-detail" class="muted"></div>
+        <div class="grow"></div>
+        <button id="start-btn" class="btn primary">شروع اجرا</button>
+        <button id="stop-btn" class="btn danger" hidden>توقف</button>
+      </header>
+      <section id="view"></section>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+pydantic>=2.8,<3.0
+pydantic-settings>=2.4,<3.0
+SQLAlchemy>=2.0.30,<2.1
+cryptography>=43.0
+litellm>=1.50
+# LiteLLM imports its MCP module on every call that passes tools; without this package
+# every agent call fails with "No module named 'mcp'".
+mcp>=1.0

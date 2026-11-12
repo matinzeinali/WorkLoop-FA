@@ -1,0 +1,27 @@
+# Secrets and local data: database (with encrypted API keys) and its encryption key
+data/*
+!data/.gitkeep
+.env
+.env.*
+!.env.example
+*.key
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
