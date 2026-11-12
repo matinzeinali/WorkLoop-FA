@@ -27,3 +27,24 @@ export function setActiveProject(project: ProjectInfo | null) {
   } catch { /* Keep project selection usable when storage is unavailable. */ }
   window.dispatchEvent(new CustomEvent<ProjectInfo | null>(ACTIVE_PROJECT_CHANGED, { detail: project }));
 }
+
+// ---- Saved projects (name + folder), shared by the sidebar and the project picker ----
+export interface SavedProject { name: string; path: string }
+const PROJECTS_KEY = "workloop:projects";
+export const PROJECTS_CHANGED = "workloop:projects-changed";
+/** Asks the project picker to open its "Create project" window. */
+export const OPEN_NEW_PROJECT = "workloop:open-new-project";
+
+export function readProjects(): SavedProject[] {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(PROJECTS_KEY) ?? "[]");
+    return Array.isArray(value)
+      ? value.filter((p): p is SavedProject => !!p && typeof p.path === "string" && typeof p.name === "string")
+      : [];
+  } catch { return []; }
+}
+
+export function writeProjects(list: SavedProject[]) {
+  try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
+  window.dispatchEvent(new Event(PROJECTS_CHANGED));
+}

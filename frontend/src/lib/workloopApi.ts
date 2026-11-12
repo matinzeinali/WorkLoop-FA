@@ -83,6 +83,8 @@ export interface ProjectInfo {
 export const workloop = {
   project: () => request<ProjectInfo>("GET", "/project"),
   browseFolder: () => request<{ path: string | null }>("POST", "/project/browse"),
+  /** Use ~/WorkLoop-Workspace as the project, for chatting without picking a folder. */
+  useScratchProject: () => request<ProjectInfo>("POST", "/project/scratch"),
   setProject: (path: string) => request<ProjectInfo>("PUT", "/project", { path }),
   providers: () => request<Provider[]>("GET", "/providers"),
   profiles: () => request<Profile[]>("GET", "/profiles"),
@@ -110,7 +112,7 @@ export function explainError(e: unknown, locale: "fa" | "en"): string {
   const err = e as ApiError;
   const fa: Record<string, string> = {
     ROLES_NOT_SET: "اول در تنظیمات برای رئیس و کارمند یک API فعال کنید.",
-    PROJECT_NOT_SET: "اول پوشه پروژه را بالای کادر پیام وصل کنید.",
+    PROJECT_NOT_SET: "پوشه کاری آماده نشد. یک پروژه انتخاب کنید یا دوباره بفرستید.",
     PROJECT_NOT_FOUND: "پوشه پروژه دیگر وجود ندارد. یک پوشه دیگر وصل کنید.",
     NO_PENDING_PROMPTS: "پرامپتی در صف نیست.",
     RUN_ACTIVE: "یک اجرا در جریان است.",

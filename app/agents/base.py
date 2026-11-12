@@ -268,7 +268,7 @@ class Agent:
         args: dict[str, Any] = arguments if isinstance(arguments, dict) else {}
         return _Call(call_id, str(event.get("name") or ""), args, raw if isinstance(raw, str) else None)
 
-    async def _call_llm(self, kind: TurnKind, state: _TurnState) -> tuple[str, list[_Call], int]:
+    async def _call_llm(self, kind: TurnKind, state: _TurnState, force_tools: bool = False) -> tuple[str, list[_Call], int]:
         """Stream one assistant message (with retries). Returns (text, tool calls, message id)."""
         message_id = await self._start_message(kind)
         state.message_ids.append(message_id)
@@ -280,7 +280,10 @@ class Agent:
             while True:
                 parts, events = [], []
                 try:
-                    async for event in llm.stream_chat(self.model, self.history, tools=self.tools or None):
+                    async for event in llm.stream_chat(
+                        self.model, self.history, tools=self.tools or None,
+                        tool_choice="required" if force_tools and self.tools else "auto",
+                    ):
                         if event["type"] == "token":
                             parts.append(event["text"])
                             self._batcher.add(message_id, event["text"])
@@ -425,7 +428,10 @@ class Agent:
             # Token counting over a long history is CPU-heavy: keep it off the event loop.
             await asyncio.to_thread(self.fit_context)
             state.llm_calls += 1
-            text, calls, message_id = await self._call_llm(kind, state)
+            # After a reply without the needed tool call, require one: some models (e.g. Qwen via
+            # OpenAI-compatible APIs) answer with empty text under "auto" but call tools when required.
+            force = state.reminders > 0 and not allow_no_tool_end
+            text, calls, message_id = await self._call_llm(kind, state, force_tools=force)
 
             if not calls:
                 if allow_no_tool_end:

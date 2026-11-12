@@ -58,29 +58,6 @@ const TEXT = {
 };
 type Text = (typeof TEXT)["fa"];
 
-const KEY_PREFIXES: Record<string, string[]> = {
-  gemini: ["AIza"],
-  anthropic: ["sk-ant-"],
-  openrouter: ["sk-or-"],
-  groq: ["gsk_"],
-  xai: ["xai-"],
-  openai: ["sk-"],
-  deepseek: ["sk-"],
-};
-
-/** A warning when the key clearly doesn't look like the chosen provider's keys. */
-function keyMismatch(provider: string, key: string, fa: boolean): string {
-  const k = key.trim();
-  const expected = KEY_PREFIXES[provider];
-  // Saved keys only show their first 4 characters, so a short key matches a longer prefix too.
-  if (!k || !expected || expected.some((p) => k.startsWith(p) || (k.length < p.length && p.startsWith(k)))) return "";
-  if (provider === "openai" && (k.startsWith("sk-ant-") || k.startsWith("sk-or-"))) return "";
-  const list = expected.map((p) => `${p}…`).join(fa ? " یا " : " or ");
-  return fa
-    ? `کلیدهای این ارائه‌دهنده معمولاً با ${list} شروع می‌شوند. اگر کلید را از سرویس دیگری (مثلاً یک واسط یا سرویس ایرانی) گرفته‌اید، ارائه‌دهنده را «Custom (OpenAI-compatible)» بگذارید و Base URL همان سرویس را وارد کنید.`
-    : `Keys for this provider usually start with ${list}. If the key is from another service (a proxy or reseller), choose "Custom (OpenAI-compatible)" and enter that service's Base URL.`;
-}
-
 interface Draft { id: number | null; label: string; provider: string; model: string; apiKey: string; baseUrl: string; keyPreview?: string }
 
 function ApiForm({ draft, providers, text, onCancel, onSaved, notify }: {
@@ -128,12 +105,7 @@ function ApiForm({ draft, providers, text, onCancel, onSaved, notify }: {
         </Field>
         <Field label={text.apiKey} htmlFor="api-key">
           <input id="api-key" type="password" dir="ltr" autoComplete="off" className={inputClass}
-            placeholder={d.keyPreview ? text.keepKey(d.keyPreview) : (KEY_PREFIXES[d.provider]?.[0] ?? "") + "..."} value={d.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
-          {keyMismatch(d.provider, d.apiKey || (d.keyPreview ?? "").split("...")[0], text === TEXT.fa) && (
-            <p role="alert" className="m-0 text-[12.5px] leading-5 text-amber-300">
-              {keyMismatch(d.provider, d.apiKey || (d.keyPreview ?? "").split("...")[0], text === TEXT.fa)}
-            </p>
-          )}
+            placeholder={d.keyPreview ? text.keepKey(d.keyPreview) : "sk-..."} value={d.apiKey} onChange={(e) => set({ apiKey: e.target.value })} />
         </Field>
       </div>
       <Field label={`${text.baseUrl} (${info?.requires_base_url ? text.required : text.optional})`} htmlFor="api-base">
@@ -262,11 +234,6 @@ export default function AiSection({ onNotify }: { onNotify: (message: string) =>
                     {p.last_test_ok != null && <span className={`text-[12px] ${p.last_test_ok ? "text-emerald-300" : "text-red-300"}`}>{p.last_test_ok ? "✓" : "✗"}</span>}
                   </p>
                   <p className="m-0 text-[12px] text-white/50" dir="auto">{providerName(p.provider)} · <span dir="ltr">{p.model_name}</span> · <span dir="ltr">{p.key_preview}</span></p>
-                  {keyMismatch(p.provider, p.key_preview.split("...")[0], locale === "fa") && (
-                    <p className="m-0 mt-0.5 text-[12px] text-amber-300">
-                      {locale === "fa" ? "⚠ این کلید شبیه کلیدهای این ارائه‌دهنده نیست." : "⚠ This key doesn't look like this provider's keys."}
-                    </p>
-                  )}
                 </div>
                 <div className="flex gap-1">
                   <IconBtn label={text.test} onClick={() => test(p)} disabled={testing === p.id}><Zap className="size-4" /></IconBtn>

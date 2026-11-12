@@ -216,6 +216,11 @@ def map_exception(exc: BaseException, secret: str | None = None) -> ProviderErro
         return ProviderError("The provider is temporarily unavailable.", "unavailable")
     if isinstance(exc, _tuple("BadRequestError")):
         text = str(exc).lower()
+        if "insufficient balance" in text or "insufficient_balance" in text or "insufficient_quota" in text:
+            return ProviderError(
+                "The key works, but the provider account has no credit left. Top up the account and try again.",
+                "no_credit",
+            )
         if "model" in text and ("not found" in text or "does not exist" in text or "invalid model" in text):
             return ProviderError("Model not found. Check the model name.", "not_found")
         if "api key" in text or "api_key" in text:
@@ -404,6 +409,7 @@ async def stream_chat(
     tools: Sequence[dict[str, Any]] | None = None,
     temperature: float | None = None,
     timeout: float = 600,
+    tool_choice: str = "auto",
 ) -> AsyncIterator[StreamEvent]:
     """Stream a chat completion as normalized events.
 
@@ -424,7 +430,8 @@ async def stream_chat(
     }
     if tools:
         kwargs["tools"] = list(tools)
-        kwargs["tool_choice"] = "auto"
+        # "required" forces a tool call; some models only use tools when told they must.
+        kwargs["tool_choice"] = tool_choice
     if temperature is not None:
         kwargs["temperature"] = temperature
 

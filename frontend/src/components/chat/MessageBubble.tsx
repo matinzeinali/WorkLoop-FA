@@ -128,7 +128,7 @@ export default function MessageBubble({
               {message.content}
             </p>
             )}
-            {regenerating && <p role="status" className="m-0 mt-1 text-[11px] text-white/45 lg:text-[15px]">{t("regenerating")}</p>}
+            {regenerating && !message.run && <p role="status" className="m-0 mt-1 text-[11px] text-white/45 lg:text-[15px]">{t("regenerating")}</p>}
             <div className="mt-1">{actions}</div>
           </div>
         </div>

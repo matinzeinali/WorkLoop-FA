@@ -16,6 +16,7 @@ interface Props {
   onShareMessage?: (message: Message) => void;
   onEditPrompt?: (id: string, content: string) => void;
   onRegenerateAnswer?: (id: string) => void;
+  onRegenerateRun?: (id: string) => void;
   runActions?: RunActions;
 }
 
@@ -29,6 +30,7 @@ export default function ChatPanel({
   onShareMessage,
   onEditPrompt,
   onRegenerateAnswer,
+  onRegenerateRun,
   runActions,
 }: Props) {
   const endRef = useRef<HTMLDivElement>(null);
@@ -90,11 +92,11 @@ export default function ChatPanel({
             <MessageBubble
               key={m.id}
               message={m}
-              regenerating={regeneratingMessageIds.includes(m.id)}
+              regenerating={regeneratingMessageIds.includes(m.id) || (!!m.run && (m.run.status === "running" || (m.run.status === "pending" && !!runActions?.runActive)))}
               onCopy={onCopyMessage}
               onShare={onShareMessage}
               onEdit={m.role === "user" ? onEditPrompt : undefined}
-              onRegenerate={m.role === "assistant" && !m.run ? onRegenerateAnswer : undefined}
+              onRegenerate={m.role === "assistant" ? (m.run ? onRegenerateRun : onRegenerateAnswer) : undefined}
               runActions={runActions}
             />
           ))}

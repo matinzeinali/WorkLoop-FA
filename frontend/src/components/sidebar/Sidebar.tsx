@@ -19,6 +19,10 @@ interface Props {
   groups?: ChatGroup[];
   onChatAction?: (id: string, action: ChatAction) => void;
   name?: string;
+  projectGroups?: ChatGroup[];
+  activeProjectPath?: string | null;
+  onSelectProject?: (path: string) => void;
+  onNewProject?: () => void;
 }
 
 export default function Sidebar({
@@ -31,6 +35,10 @@ export default function Sidebar({
   groups = chatGroups,
   onChatAction,
   name = user.name,
+  projectGroups = [],
+  activeProjectPath = null,
+  onSelectProject,
+  onNewProject,
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -87,6 +95,10 @@ export default function Sidebar({
         onSelect={onSelect}
         onAction={onChatAction}
         emptyMessage={t("noSearchResults")}
+        projectGroups={query.trim() ? [] : projectGroups}
+        activeProjectPath={activeProjectPath}
+        onSelectProject={onSelectProject}
+        onNewProject={onNewProject}
       />
       <div className="mt-[28.5px]">
         <div className="flex items-center gap-1">

@@ -1,21 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, Folder, FolderOpen, FolderPlus, Laptop, Lightbulb, Plus, X } from "lucide-react";
+import { Check, Folder, FolderOpen, FolderPlus, Laptop, Lightbulb, MessageSquare, Plus, X } from "lucide-react";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useLocale } from "../../context/LocaleContext";
 import { workloop, type ApiError, type ProjectInfo } from "../../lib/workloopApi";
-import { setActiveProject } from "../../lib/projectState";
+import { ACTIVE_PROJECT_CHANGED, OPEN_NEW_PROJECT, PROJECTS_CHANGED, readProjects, setActiveProject, writeProjects, type SavedProject } from "../../lib/projectState";
 
 // A project is a name + one folder. The backend keeps only the active folder,
 // so the list of saved projects lives in this browser.
-interface SavedProject { name: string; path: string }
-const STORE_KEY = "workloop:projects";
-const readProjects = (): SavedProject[] => {
-  try { return JSON.parse(localStorage.getItem(STORE_KEY) ?? "[]"); } catch { return []; }
-};
-const writeProjects = (list: SavedProject[]) => {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch { /* storage unavailable */ }
-};
 const folderName = (path: string) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
 
 const TEXT = {
@@ -56,6 +48,19 @@ export default function ProjectPicker() {
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
   useDismiss(rootRef, menuOpen, () => setMenuOpen(false));
+  useEffect(() => {
+    const onList = () => setProjects(readProjects());
+    const onActive = (e: Event) => setProject((e as CustomEvent<ProjectInfo | null>).detail);
+    const onOpen = () => setModalOpen(true);
+    window.addEventListener(PROJECTS_CHANGED, onList);
+    window.addEventListener(ACTIVE_PROJECT_CHANGED, onActive);
+    window.addEventListener(OPEN_NEW_PROJECT, onOpen);
+    return () => {
+      window.removeEventListener(PROJECTS_CHANGED, onList);
+      window.removeEventListener(ACTIVE_PROJECT_CHANGED, onActive);
+      window.removeEventListener(OPEN_NEW_PROJECT, onOpen);
+    };
+  }, []);
 
   useEffect(() => {
     workloop.project()
@@ -125,6 +130,19 @@ export default function ProjectPicker() {
             );
           })}
           <div className="my-1 h-px bg-white/10" />
+          <button type="button" role="menuitem"
+            onClick={async () => {
+              setError("");
+              try { const info = await workloop.useScratchProject(); setProject(info); setActiveProject(info); setMenuOpen(false); }
+              catch (e) { setError(errorText(e, text)); }
+            }}
+            className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-start text-[13.5px] hover:bg-white/10">
+            <MessageSquare className="size-4 text-white/55" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              <span className="block">{locale === "fa" ? "بدون پروژه" : "No project"}</span>
+              <span className="block text-[11.5px] text-white/45">{locale === "fa" ? "فقط چت؛ در پوشه WorkLoop-Workspace" : "Just chat, in the WorkLoop-Workspace folder"}</span>
+            </span>
+          </button>
           <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setModalOpen(true); }}
             className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-start text-[13.5px] hover:bg-white/10">
             <Plus className="size-4 text-white/55" aria-hidden="true" />{text.newProject}

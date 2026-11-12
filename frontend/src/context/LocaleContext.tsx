@@ -6,7 +6,7 @@ const messages: Record<Locale, Record<string, string>> = {
   en: {
     brandName: "Chat bot", workspace: "AI Workspace", searchChats: "Search chats", closeSearch: "Close search", searchPlaceholder: "Search chats",
     noSearchResults: "No chats match your search.", closeSidebar: "Close sidebar", openSidebar: "Open sidebar", openMenu: "Open menu",
-    closeHistory: "Close chat history", history: "Chat history", newChat: "New chat", projects: "Projects", recents: "Recents", pinned: "Pinned", today: "Today",
+    closeHistory: "Close chat history", history: "Chat history", newChat: "New chat", projects: "Projects", newProject: "New project", noProjects: "No projects yet — create one", noProjectChats: "No chats yet", recents: "Recents", pinned: "Pinned", today: "Today",
     week: "Previous 7 days", archive: "Archived", archived: "Archived", userPlan: "Free plan", welcome: "How can I help you?", message: "Message",
     messagePlaceholder: "Describe a task for the Boss and Worker…", mobileMessagePlaceholder: "How can I help you today?", sendMessage: "Send message", attachFiles: "Attach images or PDFs", startVoice: "Start voice input",
     stopVoice: "Stop voice input", cancelVoice: "Cancel voice input", confirmVoice: "Keep voice transcription", voiceUnsupported: "Voice input is not supported in this browser", listening: "I'm listening",
@@ -64,7 +64,7 @@ const messages: Record<Locale, Record<string, string>> = {
   fa: {
     brandName: "چت‌بات", workspace: "فضای کار هوش مصنوعی", searchChats: "جست‌وجوی گفتگوها", closeSearch: "بستن جست‌وجو", searchPlaceholder: "جست‌وجوی گفتگوها",
     noSearchResults: "گفتگویی با این عبارت پیدا نشد.", closeSidebar: "بستن نوار کناری", openSidebar: "باز کردن نوار کناری", openMenu: "باز کردن منو",
-    closeHistory: "بستن تاریخچه گفتگوها", history: "تاریخچه گفتگوها", newChat: "گفتگوی جدید", projects: "پروژه‌ها", recents: "گفتگوهای اخیر", pinned: "سنجاق‌شده", today: "امروز",
+    closeHistory: "بستن تاریخچه گفتگوها", history: "تاریخچه گفتگوها", newChat: "گفتگوی جدید", projects: "پروژه‌ها", newProject: "پروژه جدید", noProjects: "هنوز پروژه‌ای نیست؛ یکی بسازید", noProjectChats: "هنوز گفتگویی نیست", recents: "گفتگوهای اخیر", pinned: "سنجاق‌شده", today: "امروز",
     week: "۷ روز گذشته", archive: "بایگانی‌شده", archived: "بایگانی‌شده", userPlan: "طرح رایگان", welcome: "چطور می‌توانم کمک کنم؟", message: "پیام",
     messagePlaceholder: "کاری که رئیس و کارمند باید انجام دهند را بنویسید…", mobileMessagePlaceholder: "امروز چطور می‌توانم کمکتان کنم؟", sendMessage: "ارسال پیام", attachFiles: "پیوست تصویر یا فایل PDF", startVoice: "شروع ورودی صوتی",
     stopVoice: "توقف ورودی صوتی", cancelVoice: "لغو ورودی صوتی", confirmVoice: "تأیید متن تشخیص‌داده‌شده", voiceUnsupported: "ورودی صوتی در این مرورگر پشتیبانی نمی‌شود", listening: "در حال گوش‌دادن",

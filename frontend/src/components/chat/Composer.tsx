@@ -55,7 +55,7 @@ export default function Composer({ compact, thinking = false, busy = false, onSe
     return () => media.removeEventListener("change", update);
   }, []);
 
-  useEffect(() => {
+  const fitHeight = () => {
     const textarea = textareaRef.current;
     if (!textarea) return;
     textarea.style.height = "auto";
@@ -63,7 +63,20 @@ export default function Composer({ compact, thinking = false, busy = false, onSe
     // Only scroll once the text outgrows the max height; sub-pixel rounding under
     // the desktop UI scale otherwise shows a scrollbar on a single line.
     textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden";
-  }, [value]);
+  };
+  useEffect(fitHeight, [value]);
+  // Re-measure when the width changes: on first layout the box can be measured before
+  // it has its final width, which wraps the text and leaves it stuck at full height.
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea || typeof ResizeObserver === "undefined") return;
+    let lastWidth = textarea.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      if (textarea.offsetWidth !== lastWidth) { lastWidth = textarea.offsetWidth; fitHeight(); }
+    });
+    observer.observe(textarea);
+    return () => observer.disconnect();
+  }, []);
 
   const addFiles = (files: FileList | File[]) => {
     setError(undefined);

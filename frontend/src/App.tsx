@@ -12,13 +12,16 @@ import ActionDialog, { type ActionDialogState } from "./components/ui/ActionDial
 import { customInstructions, selectedModel, sendChat, type ChatMessage } from "./lib/paastaApi";
 import LoginScreen from "./components/auth/LoginScreen";
 import { workloop, explainError } from "./lib/workloopApi";
-import { applyEvent, eventPromptId, subscribeLive, traceToText, type RunState, type RunTrace } from "./lib/workloopLive";
+import { ACTIVE_PROJECT_CHANGED, OPEN_NEW_PROJECT, PROJECTS_CHANGED, getActiveProject, readProjects, setActiveProject } from "./lib/projectState";
+import { applyEvent, eventPromptId, promptLang, subscribeLive, traceToText, type RunState, type RunTrace } from "./lib/workloopLive";
 import type { RunActions } from "./components/chat/RunTraceView";
 import { isDemo, runDemo } from "./lib/demo";
 import { authenticateUser, restoreAuthSession, saveAuthSession, type AuthAccount } from "./lib/localAuth";
 
 interface Conversation extends ChatSummary {
   groupId: string;
+  /** Folder of the project that was active when the chat started. */
+  projectPath?: string;
   messages: Message[];
   updatedAt: number;
 }
@@ -238,6 +241,15 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
 
   // ---- WorkLoop: every chat message is a prompt; replies show the live run. ----
   const [runState, setRunState] = useState<RunState>({ state: "idle", run_id: null, prompt_id: null, round: null, max_rounds: 6 });
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+  /** Point the backend at a chat's project before it runs (only possible while no run is active). */
+  const applyChatProject = async (path: string | undefined) => {
+    if (!path || runStateRef.current.state !== "idle") return;
+    const current = await workloop.project().catch(() => null);
+    if (current?.path === path) return;
+    setActiveProject(await workloop.setProject(path));
+  };
   const runStateRef = useRef(runState);
   runStateRef.current = runState;
   const demoAbort = useRef<AbortController | null>(null);
@@ -275,7 +287,7 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
     const userMessage: Message = { id: crypto.randomUUID(), role: "user", content };
     const reply: Message = {
       id: crypto.randomUUID(), role: "assistant", content: "", replyToId: userMessage.id,
-      run: { promptId, status: "pending", roundsUsed: 0, items: [] },
+      run: { promptId, status: "pending", roundsUsed: 0, items: [], lang: promptLang(content) },
     };
     setConversations((current) => current.map((c) => c.id === conversationId
       ? { ...c, updatedAt: Date.now(), messages: [...c.messages, userMessage, reply] } : c));
@@ -369,6 +381,34 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
     if (!conversation) return [];
     return localizedMessages(conversation, locale);
   }, [conversations, activeId, locale, t]);
+  const [savedProjects, setSavedProjects] = useState(readProjects);
+  const [activeProjectPath, setActiveProjectPath] = useState(() => getActiveProject()?.path ?? null);
+  useEffect(() => {
+    const onList = () => setSavedProjects(readProjects());
+    const onActive = () => setActiveProjectPath(getActiveProject()?.path ?? null);
+    window.addEventListener(PROJECTS_CHANGED, onList);
+    window.addEventListener(ACTIVE_PROJECT_CHANGED, onActive);
+    return () => { window.removeEventListener(PROJECTS_CHANGED, onList); window.removeEventListener(ACTIVE_PROJECT_CHANGED, onActive); };
+  }, []);
+  const projectGroups: ChatGroup[] = useMemo(() => savedProjects.map((project) => ({
+    id: `project:${project.path}`,
+    label: project.name,
+    chats: conversations
+      .filter((conversation) => conversation.projectPath === project.path && conversation.groupId !== "archive")
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 5)
+      .map((conversation) => ({ ...conversation, title: localizedTitle(conversation.id, conversation.title, locale) })),
+  })), [savedProjects, conversations, locale]);
+  const selectProject = async (path: string) => {
+    try {
+      const info = await workloop.setProject(path);
+      setActiveProject(info);
+      setView("chat");
+      setActiveId(undefined);
+    } catch (e) { notify(explainError(e, locale)); }
+  };
+  const newProject = () => { setView("chat"); window.dispatchEvent(new Event(OPEN_NEW_PROJECT)); };
+
   // Archived chats stay out of the sidebar history.
   const groups: ChatGroup[] = useMemo(() => chatGroups.filter((group) => group.id !== "archive").map((group) => ({
     ...group,
@@ -377,39 +417,19 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
       .map((conversation) => ({ ...conversation, title: localizedTitle(conversation.id, conversation.title, locale) })),
   })), [conversations, locale, t]);
 
-  const send = (content: string, attachments: Attachment[]) => {
-    if (pendingRequests.current.length > 0) return;
-    const id = activeId ?? crypto.randomUUID();
-    const userMessage: Message = { id: crypto.randomUUID(), role: "user", content, attachments };
-    setActiveId(id);
-    setView("chat");
-    setConversations((current) => {
-      const exists = current.some((conversation) => conversation.id === id);
-      const next = current.map((conversation) => conversation.id === id
-        ? { ...conversation, groupId: conversation.groupId === "archive" ? "today" : conversation.groupId, updatedAt: Date.now(), messages: [...conversation.messages, userMessage] }
-        : conversation);
-      return exists ? next : [{
-        id,
-        title: safeTitle(content) || t("newChat"),
-        groupId: "today",
-        updatedAt: Date.now(),
-        messages: [userMessage],
-      }, ...next];
-    });
-    setThinkingIds((current) => current.includes(id) ? current : [...current, id]);
-    // Attachments can't reach the agents; mention them by name in the prompt.
-    const promptText = attachments.length
-      ? `${content}\n\n[Attached: ${attachments.map((a) => a.name).join(", ")}]` : content;
+  /**
+   * Queue a prompt and start a run (or play the demo). `attach` puts the run on a reply:
+   * send() adds a new reply, regenerate replaces the existing one.
+   */
+  const launchRun = (id: string, content: string, promptText: string, attach: (reply: Partial<Message>) => void) => {
+    const addReply = attach;
     const request = new AbortController();
     pendingRequests.current.push(request);
-    const addReply = (reply: Partial<Message>) => setConversations((current) => current.map((conversation) => conversation.id === id
-      ? { ...conversation, updatedAt: Date.now(), messages: [...conversation.messages, { id: crypto.randomUUID(), role: "assistant", content: "", replyToId: userMessage.id, ...reply }] }
-      : conversation));
     (async () => {
       if (isDemo()) {
         if (demoAbort.current) throw new Error(locale === "fa" ? "یک دمو در حال پخش است." : "A demo is already playing.");
         const promptId = -Date.now(); // negative: never clashes with real prompt ids
-        addReply({ run: { promptId, status: "pending", roundsUsed: 0, items: [] } });
+        addReply({ run: { promptId, status: "pending", roundsUsed: 0, items: [], lang: promptLang(content) } });
         setThinkingIds((current) => current.filter((thinkingId) => thinkingId !== id)); // the trace shows progress
         const abort = new AbortController();
         demoAbort.current = abort;
@@ -429,11 +449,21 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
         }
         return;
       }
+      // Run in the chat's own project, not whatever folder happens to be active.
+      await applyChatProject(conversationsRef.current.find((c) => c.id === id)?.projectPath ?? getActiveProject()?.path ?? undefined);
       const prompt = await workloop.createPrompt(promptText);
-      addReply({ run: { promptId: prompt.id, status: "pending", roundsUsed: 0, items: [] } });
+      addReply({ run: { promptId: prompt.id, status: "pending", roundsUsed: 0, items: [], lang: promptLang(content) } });
       if (runStateRef.current.state !== "idle") return; // the active run takes it from the queue
       try {
-        await workloop.startRun();
+        try {
+          await workloop.startRun();
+        } catch (e) {
+          // No project folder yet: chat in the default workspace folder and try once more.
+          const code = (e as { code?: string }).code;
+          if (code !== "PROJECT_NOT_SET" && code !== "PROJECT_NOT_FOUND") throw e;
+          setActiveProject(await workloop.useScratchProject());
+          await workloop.startRun();
+        }
       } catch (e) {
         if ((e as { code?: string }).code === "RUN_ACTIVE") return;
         // Nothing will run it: take it back out of the queue and show why.
@@ -448,9 +478,69 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
       });
   };
 
+  /** Run a WorkLoop reply's prompt again; the reply is replaced by the new run. */
+  const regenerateRun = (messageId: string) => {
+    if (!activeId || pendingRequests.current.length > 0) return;
+    const conversation = conversations.find((c) => c.id === activeId);
+    const reply = conversation?.messages.find((m) => m.id === messageId);
+    if (!conversation || !reply?.run) return;
+    const stuckInQueue = reply.run.status === "pending" && runStateRef.current.state === "idle";
+    if (reply.run.status === "running" || (reply.run.status === "pending" && !stuckInQueue)) {
+      notify(locale === "fa" ? "این اجرا هنوز تمام نشده." : "This run hasn't finished yet.");
+      return;
+    }
+    // A prompt left queued with nothing running it: take it out before running again.
+    if (stuckInQueue && reply.run.promptId > 0) void workloop.deletePrompt(reply.run.promptId).catch(() => undefined);
+    const prompt = conversation.messages.find((m) => m.id === reply.replyToId)
+      ?? [...conversation.messages.slice(0, conversation.messages.indexOf(reply))].reverse().find((m) => m.role === "user");
+    if (!prompt) return;
+    const conversationId = conversation.id;
+    const replace = (patch: Partial<Message>) => setConversations((current) => current.map((c) => c.id !== conversationId ? c : {
+      ...c,
+      updatedAt: Date.now(),
+      messages: c.messages.map((m) => m.id === messageId
+        ? { ...m, content: "", run: undefined, ...patch, ...(patch.run ? { run: { ...patch.run, regenerated: true } } : {}) }
+        : m),
+    }));
+    setThinkingIds((current) => current.includes(conversationId) ? current : [...current, conversationId]);
+    launchRun(conversationId, prompt.content, prompt.content, replace);
+  };
+
+  const send = (content: string, attachments: Attachment[]) => {
+    if (pendingRequests.current.length > 0) return;
+    const id = activeId ?? crypto.randomUUID();
+    const userMessage: Message = { id: crypto.randomUUID(), role: "user", content, attachments };
+    setActiveId(id);
+    setView("chat");
+    setConversations((current) => {
+      const exists = current.some((conversation) => conversation.id === id);
+      const next = current.map((conversation) => conversation.id === id
+        ? { ...conversation, groupId: conversation.groupId === "archive" ? "today" : conversation.groupId, updatedAt: Date.now(), messages: [...conversation.messages, userMessage] }
+        : conversation);
+      return exists ? next : [{
+        id,
+        title: safeTitle(content) || t("newChat"),
+        groupId: "today",
+        projectPath: getActiveProject()?.path ?? undefined,
+        updatedAt: Date.now(),
+        messages: [userMessage],
+      }, ...next];
+    });
+    setThinkingIds((current) => current.includes(id) ? current : [...current, id]);
+    // Attachments can't reach the agents; mention them by name in the prompt.
+    const promptText = attachments.length
+      ? `${content}\n\n[Attached: ${attachments.map((a) => a.name).join(", ")}]` : content;
+    const addReply = (reply: Partial<Message>) => setConversations((current) => current.map((conversation) => conversation.id === id
+      ? { ...conversation, updatedAt: Date.now(), messages: [...conversation.messages, { id: crypto.randomUUID(), role: "assistant", content: "", replyToId: userMessage.id, ...reply }] }
+      : conversation));
+    launchRun(id, content, promptText, addReply);
+  };
+
   const selectChat = (id: string) => {
     setView("chat");
     setActiveId(id);
+    // Opening a chat makes its project the active one (shown under the prompt box).
+    void applyChatProject(conversations.find((c) => c.id === id)?.projectPath).catch((e) => notify(explainError(e, locale)));
   };
 
   const newChat = () => {
@@ -632,6 +722,10 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
             }}
           >
             <Sidebar
+              projectGroups={projectGroups}
+              activeProjectPath={activeProjectPath}
+              onSelectProject={selectProject}
+              onNewProject={newProject}
               activeId={activeId}
               groups={groups}
               focusSearchKey={sidebarSearchKey}
@@ -729,6 +823,7 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
           onCopyMessage={copyMessage}
           onShareMessage={shareMessage}
           onRegenerateAnswer={regenerateAnswer}
+          onRegenerateRun={regenerateRun}
           runActions={runActions}
         />
       </main>
@@ -757,6 +852,10 @@ function ChatWorkspace({ account, onLogout }: { account: AuthAccount; onLogout: 
         }`}
       >
         <Sidebar
+              projectGroups={projectGroups}
+              activeProjectPath={activeProjectPath}
+              onSelectProject={selectProject}
+              onNewProject={newProject}
           groups={groups}
           focusSearchKey={drawerSearchKey}
           name={profileName}

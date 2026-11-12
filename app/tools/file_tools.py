@@ -10,6 +10,7 @@ runs them in a worker thread.
 from __future__ import annotations
 
 import fnmatch
+from app.core.fs import is_junction
 import os
 import stat
 import sys
@@ -158,7 +159,7 @@ def list_files(project_root: Path, path: str = ".", recursive: bool = False, max
                 continue
             item_path = Path(item.path)
             # Junctions (Windows) are links too, but DirEntry.is_symlink() doesn't report them.
-            is_link = item.is_symlink() or item.is_junction()
+            is_link = item.is_symlink() or is_junction(item)
             if is_link:
                 try:
                     if not _is_inside(item_path.resolve(), root):

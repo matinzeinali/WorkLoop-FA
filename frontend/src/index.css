@@ -931,3 +931,5 @@ body {
   -webkit-backdrop-filter: none;
 }
 [data-theme="dark"] .glass-scrim { background: rgb(0 0 0 / 0.55); backdrop-filter: blur(4px); }
+
+@keyframes wl-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

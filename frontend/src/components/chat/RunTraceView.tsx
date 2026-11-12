@@ -23,7 +23,7 @@ const T = {
     permTitle: "رئیس می‌خواهد یک دستور خطرناک اجرا کند", allow: "اجازه بده", deny: "رد کن", allowed: "اجازه داده شد", denied: "رد شد",
     needsTitle: (n: number) => `بعد از ${n} دور تأیید نشد. چه کنیم؟`,
     fixPh: "پرامپت اصلاحی: بگویید چه چیزی را درست کنند…", sendFix: "ارسال اصلاحیه و ادامه",
-    manual: "خودم دستی درستش کردم", stop: "توقف اجرا", tools: (n: number) => `${n} ابزار`, waiting: "منتظر شروع…",
+    manual: "خودم دستی درستش کردم", stop: "توقف اجرا", tools: (n: number) => `${n} ابزار`, waiting: "منتظر شروع…", bossQueued: "درخواستت رسید. چند لحظه صبر کن، الان شروع می‌کنیم…", bossRetry: "باشه، یک بار دیگر از اول روی این کار می‌روم. این بار دقیق‌تر بررسی می‌کنم…",
     exit: (c: number | null | undefined) => c === 0 ? "موفق" : `کد ${c ?? "?"}`, timeout: "پایان زمان", killed: "متوقف شد",
   },
   en: {
@@ -34,7 +34,7 @@ const T = {
     permTitle: "The Boss wants to run a risky command", allow: "Allow", deny: "Deny", allowed: "Allowed", denied: "Denied",
     needsTitle: (n: number) => `Not approved after ${n} rounds. What next?`,
     fixPh: "Fix prompt: tell them what to correct…", sendFix: "Send fix and continue",
-    manual: "I fixed it by hand", stop: "Stop run", tools: (n: number) => `${n} tools`, waiting: "Waiting to start…",
+    manual: "I fixed it by hand", stop: "Stop run", tools: (n: number) => `${n} tools`, waiting: "Waiting to start…", bossQueued: "Got your request. Give me a moment, we're about to start…", bossRetry: "Alright, let me take another look at this from the start. I'll check it more carefully this time…",
     exit: (c: number | null | undefined) => c === 0 ? "ok" : `exit ${c ?? "?"}`, timeout: "timed out", killed: "stopped",
   },
 };
@@ -71,14 +71,28 @@ export default function RunTraceView({ trace, actions }: { trace: RunTrace; acti
         {trace.promptId > 0 && <span className="text-[13.5px] text-white/40">#{trace.promptId}</span>}
       </div>
 
-      {!trace.items.length && busy && <p className="m-0 text-[14.5px] text-white/45">{t.waiting}</p>}
+      {!trace.items.length && busy && (
+        // Before any event arrives, the Boss greets the request (or the retry) in his own voice.
+        <AgentRow agent="boss" showAvatar active talking label={t.boss}>
+          <div className={bubbleClass("boss")} dir="auto">
+            <p dir="auto" className="m-0 whitespace-pre-wrap break-words">
+              {(() => { const tl = T[trace.lang ?? (locale === "fa" ? "fa" : "en")]; return trace.regenerated ? tl.bossRetry : tl.bossQueued; })()}
+              <span className="ms-1 inline-flex gap-0.5 align-middle" aria-hidden="true">
+                <span className="size-1 animate-pulse rounded-full bg-white/70" />
+                <span className="size-1 animate-pulse rounded-full bg-white/70 [animation-delay:150ms]" />
+                <span className="size-1 animate-pulse rounded-full bg-white/70 [animation-delay:300ms]" />
+              </span>
+            </p>
+          </div>
+        </AgentRow>
+      )}
 
       {(() => {
         const blocks = group(trace.items);
         return blocks.map((b, i) => {
           const owner = ownerOf(b);
           const prev = i > 0 ? ownerOf(blocks[i - 1]) : null;
-          return <BlockView key={i} block={b} t={t} actions={isCurrent ? actions : undefined} showAvatar={owner !== prev} running={busy} />;
+          return <BlockView key={i} block={b} t={t} actions={isCurrent ? actions : undefined} showAvatar={owner !== prev} running={busy} lang={trace.lang ?? (locale === "fa" ? "fa" : "en")} />;
         });
       })()}
 
@@ -125,7 +139,7 @@ function bubbleClass(agent: "boss" | "worker") {
   }`;
 }
 
-function BlockView({ block, t, actions, showAvatar, running }: { block: Block; t: Text; actions?: RunActions; showAvatar: boolean; running: boolean }) {
+function BlockView({ block, t, actions, showAvatar, running, lang }: { block: Block; t: Text; actions?: RunActions; showAvatar: boolean; running: boolean; lang: "fa" | "en" }) {
   const owner = ownerOf(block);
   const content = (() => {
     switch (block.kind) {
@@ -135,7 +149,12 @@ function BlockView({ block, t, actions, showAvatar, running }: { block: Block; t
         return (
           <div className={bubbleClass(block.agent)} dir="auto">
             <p className="m-0 mb-0.5 text-[12.5px] text-white/45">{t.kind[block.msgKind] ?? block.msgKind}</p>
-            <p dir="auto" className="m-0 whitespace-pre-wrap break-words">{block.text}{!block.done && <span className="animate-pulse">▍</span>}</p>
+            {!block.text.trim() && !block.done ? (
+              // Started but nothing written yet: show that the agent is working.
+              <WorkingDots label={lang === "fa" ? "در حال فکر کردن" : "Thinking"} />
+            ) : (
+              <p dir="auto" className="m-0 whitespace-pre-wrap break-words">{block.text}{!block.done && <span className="animate-pulse">▍</span>}</p>
+            )}
           </div>
         );
       case "tools":
@@ -262,5 +281,19 @@ function NeedsUser({ t, rounds, summary, bugs, actions }: { t: Text; rounds: num
           className="cursor-pointer rounded-xl px-3.5 py-1.5 text-[14.5px] font-medium text-red-300 hover:bg-red-500/15 disabled:opacity-45">{t.stop}</button>
       </div>
     </div>
+  );
+}
+
+/** Three bouncing dots with a label: the agent is working but hasn't written anything yet. */
+function WorkingDots({ label }: { label: string }) {
+  return (
+    <p className="m-0 flex items-center gap-2 text-white/60" role="status" dir="auto">
+      <span className="inline-flex items-end gap-1" aria-hidden="true">
+        {[0, 1, 2].map((i) => (
+          <span key={i} className="size-1.5 animate-bounce rounded-full bg-white/70" style={{ animationDelay: `${i * 150}ms`, animationDuration: "900ms" }} />
+        ))}
+      </span>
+      <span className="bg-gradient-to-r from-white/40 via-white/90 to-white/40 bg-[length:200%_100%] bg-clip-text text-transparent [animation:wl-shimmer_1.6s_linear_infinite]">{label}…</span>
+    </p>
   );
 }

@@ -53,7 +53,8 @@ BOSS_SYSTEM_PROMPT = """You are the Boss in WorkLoop, an automated coding system
 
 ## Style
 - Short and direct. No unnecessary text.
-- Use the user's language when writing summaries for the user. Use English for tasks sent to the Worker."""
+- Language: write everything in the same language as the user's prompt (Persian prompt -> Persian, English -> English, and so on). This covers your tasks for the Worker, verdict summaries, bug descriptions, fix instructions and summaries for the user. The user reads all of it in the chat.
+- Keep code, file paths, commands, identifiers and error messages exactly as they are; do not translate them."""
 
 WORKER_SYSTEM_PROMPT = """You are the Worker in WorkLoop, an automated coding system with two AI agents: the Boss and you (the Worker).
 
@@ -85,12 +86,15 @@ WORKER_SYSTEM_PROMPT = """You are the Worker in WorkLoop, an automated coding sy
 8. Always end by calling finish_task.
 
 ## Style
-- Short and direct. Use English."""
+- Short and direct.
+- Language: write your reports and notes in the same language as the Boss's task (the user reads them in the chat).
+- Keep code, file paths, commands, identifiers and error messages exactly as they are; do not translate them."""
 
 # --- Boss templates (user-role messages) ---------------------------------------------
 
 BOSS_NEW_PROMPT = '''New prompt from the user (prompt #{prompt_id}):
 """{prompt_text}"""
+Reply in the language of this prompt, and write the task for the Worker in that language too.
 Read the project as needed, then call assign_task.'''
 
 BOSS_TEST = """The Worker finished round {round} of {max_rounds}.

@@ -21,6 +21,7 @@ from app.agents.schemas import FileChanges
 from app.db.database import SessionLocal
 from app.db.models import FileSnapshot, Snapshot
 from app.tools.file_tools import is_ignored
+from app.core.fs import is_junction
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ def _walk(root: Path, limit: int | None = None) -> tuple[list[_FileInfo], bool]:
             if is_ignored(entry.name):
                 continue
             try:
-                if entry.is_symlink() or entry.is_junction():
+                if entry.is_symlink() or is_junction(entry):
                     continue
                 if entry.is_dir(follow_symlinks=False):
                     subfolders.append(Path(entry.path))

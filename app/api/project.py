@@ -14,6 +14,7 @@ from app.core.errors import ApiError, ErrorCode
 from app.core.queue import ensure_no_active_run
 from app.db import repository as repo
 from app.db.database import get_db
+from app.core.fs import is_junction
 
 router = APIRouter(tags=["project"])
 
@@ -34,21 +35,6 @@ class ProjectUpdate(BaseModel):
     path: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
 
-def _is_junction(path: str) -> bool:
-    """os.path.isjunction exists only on Python 3.12+; fall back to the reparse-point check."""
-    if hasattr(os.path, "isjunction"):
-        return os.path.isjunction(path)
-    if sys.platform != "win32":
-        return False
-    try:
-        import stat
-
-        attrs = os.lstat(path).st_file_attributes  # type: ignore[attr-defined]
-    except (OSError, AttributeError):
-        return False
-    return bool(attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT)
-
-
 def count_files(root: Path) -> int:
     """Count files under root, skipping IGNORED_DIRS and unreadable folders.
 
@@ -60,7 +46,7 @@ def count_files(root: Path) -> int:
             d for d in dirnames
             if d not in IGNORED_DIRS
             and not os.path.islink(p := os.path.join(dirpath, d))
-            and not _is_junction(p)
+            and not is_junction(p)
         ]
         total += len(filenames)
     return total
@@ -165,6 +151,22 @@ async def browse_folder() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - e.g. no display / Tk not installed
         raise ApiError(ErrorCode.BAD_REQUEST, f"Folder dialog is not available: {exc}", 400) from exc
     return {"path": path}
+
+
+SCRATCH_DIR_NAME = "WorkLoop-Workspace"
+
+
+@router.post("/project/scratch", response_model=ProjectOut, dependencies=[Depends(ensure_no_active_run)])
+def use_scratch_project(db: DbSession) -> dict[str, Any]:
+    """Chat without picking a folder: use (and create) ~/WorkLoop-Workspace as the project."""
+    folder = Path.home() / SCRATCH_DIR_NAME
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise ApiError.validation("path", f"Could not create the workspace folder: {exc}") from exc
+    path = normalize_project_path(str(folder))
+    repo.set_project(db, str(path))
+    return project_info(str(path))
 
 
 @router.put("/project", response_model=ProjectOut, dependencies=[Depends(ensure_no_active_run)])

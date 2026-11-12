@@ -51,8 +51,15 @@ export type TraceItem =
   | { kind: "permission"; id: number; command: string; reason: string; danger: string; approved?: boolean }
   | { kind: "note"; tone: "info" | "error" | "ok"; text: string };
 
+/** Persian/Arabic script -> "fa", anything else -> "en". */
+export const promptLang = (text: string): "fa" | "en" => (/[؀-ۿ]/.test(text) ? "fa" : "en");
+
 export interface RunTrace {
   promptId: number;
+  /** Set when this run replaced an earlier one via regenerate. */
+  regenerated?: boolean;
+  /** Language of the user's prompt; the Boss's first words follow it. */
+  lang?: "fa" | "en";
   status: "pending" | "running" | "done" | "failed" | "manual_fix" | "error";
   roundsUsed: number;
   items: TraceItem[];
